@@ -1,0 +1,44 @@
+{
+    "name": "mahmoud-mhamed/laravel-backup-browse",
+    "description": "A web UI for managing Laravel backups and backup schedules, built on top of spatie/laravel-backup.",
+    "keywords": ["laravel", "backup", "browse", "spatie", "schedule"],
+    "license": "MIT",
+    "type": "library",
+    "require": {
+        "php": "^8.2",
+        "spatie/laravel-backup": "^9.0|^10.0",
+        "illuminate/support": "^10.0|^11.0|^12.0",
+        "illuminate/database": "^10.0|^11.0|^12.0",
+        "illuminate/routing": "^10.0|^11.0|^12.0",
+        "illuminate/console": "^10.0|^11.0|^12.0"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^8.0|^9.0",
+        "phpunit/phpunit": "^10.0|^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "MahmoudMhamed\\BackupBrowse\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "MahmoudMhamed\\BackupBrowse\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "MahmoudMhamed\\BackupBrowse\\BackupBrowseServiceProvider"
+            ]
+        }
+    },
+    "scripts": {
+        "test": "vendor/bin/phpunit"
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
