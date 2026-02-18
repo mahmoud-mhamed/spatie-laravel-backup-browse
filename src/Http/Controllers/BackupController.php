@@ -68,15 +68,45 @@ class BackupController extends Controller
             return back()->with('error', 'Full backups are not allowed.');
         }
 
-        $type = $onlyDb ? Backup::TYPE_DB : ($onlyFiles ? Backup::TYPE_FILES : Backup::TYPE_FULL);
-        $label = $onlyDb ? 'DB Only' : ($onlyFiles ? 'Files Only' : 'Full');
+        $timestamp = now()->format('Y-m-d H:i:s');
+        $userId = $request->user()?->getKey();
+        $userType = $request->user() ? get_class($request->user()) : null;
+
+        // Full backup: split into two separate jobs (DB + Files)
+        if (! $onlyDb && ! $onlyFiles) {
+            $dbBackup = Backup::create([
+                'name' => "Full Backup (DB) - {$timestamp}",
+                'disk' => config('backup-browse.disk'),
+                'type' => Backup::TYPE_DB,
+                'status' => Backup::STATUS_PENDING,
+                'created_by_id' => $userId,
+                'created_by_type' => $userType,
+            ]);
+
+            $filesBackup = Backup::create([
+                'name' => "Full Backup (Files) - {$timestamp}",
+                'disk' => config('backup-browse.disk'),
+                'type' => Backup::TYPE_FILES,
+                'status' => Backup::STATUS_PENDING,
+                'created_by_id' => $userId,
+                'created_by_type' => $userType,
+            ]);
+
+            CreateBackupJob::dispatchSync($dbBackup, true, false);
+            CreateBackupJob::dispatchSync($filesBackup, false, true);
+
+            return back()->with('success', 'Full backup dispatched as 2 jobs: DB + Files.');
+        }
+
+        $type = $onlyDb ? Backup::TYPE_DB : Backup::TYPE_FILES;
+        $label = $onlyDb ? 'DB Only' : 'Files Only';
         $backup = Backup::create([
-            'name' => "{$label} Backup - " . now()->format('Y-m-d H:i:s'),
+            'name' => "{$label} Backup - {$timestamp}",
             'disk' => config('backup-browse.disk'),
             'type' => $type,
             'status' => Backup::STATUS_PENDING,
-            'created_by_id' => $request->user()?->getKey(),
-            'created_by_type' => $request->user() ? get_class($request->user()) : null,
+            'created_by_id' => $userId,
+            'created_by_type' => $userType,
         ]);
 
         CreateBackupJob::dispatch($backup, $onlyDb, $onlyFiles);
