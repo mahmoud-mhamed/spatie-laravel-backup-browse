@@ -37,6 +37,10 @@ class CreateBackupJob implements ShouldQueue
     {
         $this->backup->update(['status' => Backup::STATUS_IN_PROGRESS]);
 
+        // Ensure common binary paths are available (fixes "mysqldump not found"
+        // when running from web servers like Herd/Valet that have a limited PATH)
+        $this->ensureBinaryPaths();
+
         try {
             $params = ['--disable-notifications' => true];
 
@@ -117,6 +121,38 @@ class CreateBackupJob implements ShouldQueue
                 'status' => Backup::STATUS_FAILED,
                 'error_message' => $e->getMessage(),
             ]);
+        }
+    }
+
+    /**
+     * Ensure common binary paths are in the PATH environment variable.
+     *
+     * Web servers (Herd, Valet, etc.) often have a limited PATH that doesn't
+     * include directories where database tools like mysqldump/pg_dump live.
+     */
+    protected function ensureBinaryPaths(): void
+    {
+        $currentPath = getenv('PATH') ?: '';
+
+        $commonPaths = [
+            '/opt/homebrew/bin',       // macOS (Apple Silicon) Homebrew
+            '/usr/local/bin',          // macOS (Intel) Homebrew / Linux
+            '/usr/local/mysql/bin',    // MySQL official installer (macOS)
+            '/opt/homebrew/opt/mysql/bin',
+            '/opt/homebrew/opt/mariadb/bin',
+            '/opt/homebrew/opt/postgresql/bin',
+            '/usr/bin',
+        ];
+
+        $pathsToAdd = [];
+        foreach ($commonPaths as $path) {
+            if (is_dir($path) && !str_contains($currentPath, $path)) {
+                $pathsToAdd[] = $path;
+            }
+        }
+
+        if ($pathsToAdd) {
+            putenv('PATH=' . implode(PATH_SEPARATOR, $pathsToAdd) . PATH_SEPARATOR . $currentPath);
         }
     }
 }
