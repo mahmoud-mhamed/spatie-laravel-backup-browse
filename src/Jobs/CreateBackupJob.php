@@ -37,9 +37,9 @@ class CreateBackupJob implements ShouldQueue
     {
         $this->backup->update(['status' => Backup::STATUS_IN_PROGRESS]);
 
-        // Ensure common binary paths are available (fixes "mysqldump not found"
-        // when running from web servers like Herd/Valet that have a limited PATH)
-        $this->ensureBinaryPaths();
+        // Ensure database dump binaries can be found when running from web
+        // servers like Herd/Valet that have a limited PATH
+        $this->ensureDumpBinaryPath();
 
         try {
             $params = ['--disable-notifications' => true];
@@ -125,34 +125,51 @@ class CreateBackupJob implements ShouldQueue
     }
 
     /**
-     * Ensure common binary paths are in the PATH environment variable.
+     * Ensure the dump_binary_path is configured for each database connection.
      *
      * Web servers (Herd, Valet, etc.) often have a limited PATH that doesn't
      * include directories where database tools like mysqldump/pg_dump live.
+     * This sets the dump.dump_binary_path config that spatie/laravel-backup
+     * uses to locate the binary.
      */
-    protected function ensureBinaryPaths(): void
+    protected function ensureDumpBinaryPath(): void
     {
-        $currentPath = getenv('PATH') ?: '';
+        $binaries = [
+            'mysql' => 'mysqldump',
+            'mariadb' => 'mysqldump',
+            'pgsql' => 'pg_dump',
+            'sqlite' => 'sqlite3',
+        ];
 
-        $commonPaths = [
-            '/opt/homebrew/bin',       // macOS (Apple Silicon) Homebrew
-            '/usr/local/bin',          // macOS (Intel) Homebrew / Linux
-            '/usr/local/mysql/bin',    // MySQL official installer (macOS)
+        $searchPaths = [
+            '/opt/homebrew/bin',           // macOS (Apple Silicon) Homebrew
+            '/usr/local/bin',              // macOS (Intel) Homebrew / Linux
+            '/usr/local/mysql/bin',        // MySQL official installer (macOS)
             '/opt/homebrew/opt/mysql/bin',
             '/opt/homebrew/opt/mariadb/bin',
             '/opt/homebrew/opt/postgresql/bin',
             '/usr/bin',
         ];
 
-        $pathsToAdd = [];
-        foreach ($commonPaths as $path) {
-            if (is_dir($path) && !str_contains($currentPath, $path)) {
-                $pathsToAdd[] = $path;
+        foreach (config('database.connections', []) as $name => $connection) {
+            // Skip if dump_binary_path is already configured
+            if (! empty($connection['dump']['dump_binary_path'])) {
+                continue;
             }
-        }
 
-        if ($pathsToAdd) {
-            putenv('PATH=' . implode(PATH_SEPARATOR, $pathsToAdd) . PATH_SEPARATOR . $currentPath);
+            $driver = $connection['driver'] ?? '';
+            $binary = $binaries[$driver] ?? null;
+
+            if (! $binary) {
+                continue;
+            }
+
+            foreach ($searchPaths as $searchPath) {
+                if (is_file($searchPath . DIRECTORY_SEPARATOR . $binary)) {
+                    config(["database.connections.{$name}.dump.dump_binary_path" => $searchPath]);
+                    break;
+                }
+            }
         }
     }
 }
